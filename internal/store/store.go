@@ -136,7 +136,7 @@ func buildWhere(f *Filter) (string, []any) {
 	var cond []string
 	var args []any
 	if f.HasKey {
-		cond, args = append(cond, "key != ''"), args
+		cond = append(cond, "key != ''")
 	}
 	if f.Key != "" {
 		cond, args = append(cond, "key = ?"), append(args, f.Key)

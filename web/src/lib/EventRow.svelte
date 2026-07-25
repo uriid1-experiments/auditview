@@ -128,7 +128,7 @@
         <div class="mute">
           {#if !muteOpen}
             <button class="mute-btn" onclick={(e) => { e.stopPropagation(); openMute() }}>
-              🔇 Заглушить такое
+              🔇 Заглушить
             </button>
           {:else}
             <div class="mute-form">

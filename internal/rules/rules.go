@@ -135,9 +135,35 @@ func run(name string, args ...string) (string, error) {
 	return strings.TrimSpace(string(out)), err
 }
 
+// relativePaths lists rules auditctl is guaranteed to reject. auditctl
+// stops at the first rejected line and the merged ruleset opens with -D,
+// so loading one of these leaves the kernel with *fewer* rules than
+// before — silently, since everything below never reaches it.
+func (m *Manager) relativePaths() []string {
+	files, err := m.List()
+	if err != nil {
+		return nil
+	}
+	var bad []string
+	for _, f := range files {
+		for _, e := range f.Entries {
+			if e.Path != "" && !filepath.IsAbs(e.Path) {
+				bad = append(bad, fmt.Sprintf("%s, строка %d: %s", f.Name, e.Line, strings.TrimSpace(e.Raw)))
+			}
+		}
+	}
+	return bad
+}
+
 // Apply loads the merged rules.d into the kernel and reports the result.
 func (m *Manager) Apply() *ApplyResult {
 	res := &ApplyResult{}
+	if bad := m.relativePaths(); len(bad) > 0 {
+		res.Output = "не загружено, иначе часть правил молча пропала бы из ядра.\n" +
+			"путь в -w/-F path=/-F dir= должен быть абсолютным:\n" + strings.Join(bad, "\n")
+		res.Loaded, res.Status, res.CheckOutput = m.live()
+		return res
+	}
 	out, err := run("augenrules", "--load")
 	res.Output = out
 	if err != nil {
@@ -145,16 +171,22 @@ func (m *Manager) Apply() *ApplyResult {
 		// fall through: still report what actually got loaded
 	}
 	res.OK = err == nil
-	if l, lerr := run("auditctl", "-l"); lerr == nil {
-		res.Loaded = strings.Split(l, "\n")
+	res.Loaded, res.Status, res.CheckOutput = m.live()
+	return res
+}
+
+// live reads kernel state: loaded rules, auditctl -s, augenrules --check.
+func (m *Manager) live() (loaded []string, status, check string) {
+	if l, err := run("auditctl", "-l"); err == nil {
+		loaded = strings.Split(l, "\n")
 	}
-	if s, serr := run("auditctl", "-s"); serr == nil {
-		res.Status = s
+	if s, err := run("auditctl", "-s"); err == nil {
+		status = s
 	}
 	if c, _ := run("augenrules", "--check"); c != "" {
-		res.CheckOutput = c
+		check = c
 	}
-	return res
+	return loaded, status, check
 }
 
 // Status reports live kernel state without changing anything.
@@ -197,16 +229,21 @@ func parseLine(s string) *Entry {
 		return &Entry{Kind: "comment"}
 	}
 	tok := strings.Fields(s)
+	var e *Entry
 	switch tok[0] {
 	case "-w":
-		return parseWatch(tok)
+		e = parseWatch(tok)
 	case "-a", "-A":
-		return parseSyscall(tok)
+		e = parseSyscall(tok)
 	case "-D", "-b", "-f", "-e", "--backlog_wait_time", "-r", "--loginuid-immutable":
 		return &Entry{Kind: "control"}
 	default:
 		return &Entry{Kind: "other"}
 	}
+	if e.Err == "" && e.Path != "" && !filepath.IsAbs(e.Path) {
+		e.Err = "путь должен быть абсолютным: " + e.Path
+	}
+	return e
 }
 
 func parseWatch(tok []string) *Entry {

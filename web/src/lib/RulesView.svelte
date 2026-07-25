@@ -4,7 +4,7 @@
   import RuleCard from './RuleCard.svelte'
 
   let files = $state([])
-  let dirty = $state({})      // name -> true
+  let onDisk = $state({})     // name -> content as last read/written
   let warnings = $state({})   // name -> [strings]
   let status = $state(null)
   let applyResult = $state(null)
@@ -20,6 +20,7 @@
       const res = await fetch('/api/rules')
       if (!res.ok) throw new Error(await res.text())
       files = (await res.json()).files ?? []
+      onDisk = Object.fromEntries(files.map((f) => [f.name, contentOf(f)]))
       error = null
     } catch (e) {
       error = String(e)
@@ -44,19 +45,12 @@
     return file.entries.map((e) => e.raw).join('\n')
   }
 
-  function markDirty(file) {
-    dirty = { ...dirty, [file.name]: true }
-    // re-parse locally? keep it simple: chips refresh after save
-  }
-
   function addLine(file, raw = '') {
     file.entries.push({ line: file.entries.length + 1, raw, kind: 'other' })
-    markDirty(file)
   }
 
   function removeLine(file, idx) {
     file.entries.splice(idx, 1)
-    markDirty(file)
   }
 
   async function save(file) {
@@ -71,9 +65,7 @@
       const i = files.findIndex((f) => f.name === file.name)
       if (i >= 0) files[i] = data.file
       warnings = { ...warnings, [file.name]: data.warnings ?? [] }
-      const d = { ...dirty }
-      delete d[file.name]
-      dirty = d
+      onDisk = { ...onDisk, [file.name]: contentOf(data.file) }
       error = null
       refreshStatus()
     } catch (e) {
@@ -118,7 +110,23 @@
     refreshStatus()
   }
 
-  const hasDirty = $derived(Object.keys(dirty).length > 0)
+  // Изменённость выводится сравнением с диском, а не флагом: отмена
+  // добавления или возврат строки к прежнему виду снимают её сами.
+  const dirtyNames = $derived(
+    files.filter((f) => contentOf(f) !== onDisk[f.name]).map((f) => f.name)
+  )
+  const hasDirty = $derived(dirtyNames.length > 0)
+
+  let savingAll = $state(false)
+
+  async function saveAll() {
+    savingAll = true
+    for (const name of [...dirtyNames]) {
+      const f = files.find((x) => x.name === name)
+      if (f) await save(f)
+    }
+    savingAll = false
+  }
 
   // Несохранённые правки: предупреждаем при закрытии/обновлении страницы
   $effect(() => {
@@ -165,15 +173,27 @@
   </div>
 
   {#if hasDirty}
-    <div class="hint dirty-hint">
-      ⚠ Не сохранено: <b>{Object.keys(dirty).join(', ')}</b> — нажмите
-      «Сохранить» у файла, иначе изменения не попадут на диск и
-      «Применить» загрузит старую версию.
+    <div class="dirty-wrap">
+      <div class="dirty-bar" role="status">
+        <span class="dot" aria-hidden="true"></span>
+        <div class="dirty-text">
+          <div class="dirty-title">
+            Не сохранено
+            {#each dirtyNames as name}<code>{name}</code>{/each}
+          </div>
+          <div class="dirty-note">
+            Правки живут только в браузере: «Применить» загрузит в ядро версию с диска, без них.
+          </div>
+        </div>
+        <button class="save" disabled={savingAll} onclick={saveAll}>
+          {savingAll ? 'сохраняем…' : '💾 Сохранить всё'}
+        </button>
+      </div>
     </div>
   {/if}
 
   {#if error}
-    <div class="error">{error}</div>
+    <div class="error"><b>Ошибка</b> {error}</div>
   {/if}
 
   {#if expert}
@@ -204,19 +224,20 @@
 
   {#each files as file (file.name)}
     <section class="file">
-      <div class="filehead" class:unsaved={dirty[file.name]}>
+      <div class="filehead" class:unsaved={dirtyNames.includes(file.name)}>
         <h3>{file.name}</h3>
-        {#if dirty[file.name]}
-          <span class="unsaved-badge">не сохранено</span>
+        {#if dirtyNames.includes(file.name)}
+          <span class="unsaved-badge"><span class="dot" aria-hidden="true"></span>не сохранено</span>
           <button class="save" onclick={() => save(file)}>💾 Сохранить</button>
         {/if}
-        <button class="linkish" onclick={() => addLine(file)}>
+        <button class="add" onclick={() => addLine(file)}>
           {expert ? '+ строка' : '+ правило'}
         </button>
       </div>
       {#if warnings[file.name]?.length}
         <div class="warn-box">
-          {#each warnings[file.name] as wmsg}<div>⚠ {wmsg}</div>{/each}
+          <b>Проблемы в синтаксисе — auditd такие строки не примет:</b>
+          {#each warnings[file.name] as wmsg}<div class="warn-item">{wmsg}</div>{/each}
         </div>
       {/if}
       <div class="lines">
@@ -232,12 +253,7 @@
                 {/if}
               </div>
               <div class="rawwrap">
-                <input
-                  class="raw"
-                  bind:value={entry.raw}
-                  oninput={() => markDirty(file)}
-                  spellcheck="false"
-                />
+                <input class="raw" bind:value={entry.raw} spellcheck="false" />
                 {#if describe(entry)}
                   <div class="translate">{describe(entry).icon} {describe(entry).text}</div>
                 {/if}
@@ -247,7 +263,7 @@
           {:else}
             <RuleCard
               {entry}
-              onchange={(raw) => { entry.raw = raw; markDirty(file) }}
+              onchange={(raw) => (entry.raw = raw)}
               ondelete={() => removeLine(file, i)}
             />
           {/if}
@@ -281,7 +297,7 @@
   }
   .badge.ok { color: var(--ok); }
   .badge.bad { color: var(--fail); }
-  .badge.warn { color: #d9a53f; }
+  .badge.warn { color: var(--warn); }
 
   .apply { border-color: var(--accent); color: var(--accent); }
   .expert-toggle {
@@ -308,24 +324,89 @@
   }
   .apply.armed { border-color: var(--fail); color: var(--fail); }
 
-  .hint, .error, .warn-box {
-    margin: 8px 0;
-    padding: 8px 12px;
+  /* Notices: tinted surface + coloured left rail, body text in the normal
+     foreground. Colour marks severity; it never carries the sentence. */
+  .error, .warn-box {
+    padding: 9px 12px;
     border-radius: 6px;
     font-size: 12px;
+    line-height: 1.5;
+    color: var(--fg);
   }
-  .hint { border: 1px solid var(--border); color: var(--fg-dim); }
-  .dirty-hint {
-    border-color: #d9a53f;
-    color: #d9a53f;
-    font-size: 13px;
+  .error {
+    margin: 8px 0;
+    border: 1px solid color-mix(in srgb, var(--fail) 45%, transparent);
+    border-left: 3px solid var(--fail);
+    background: color-mix(in srgb, var(--fail) 10%, var(--bg-alt));
+  }
+  .error b { color: var(--fail); margin-right: 6px; }
+  .warn-box {
+    margin: 8px; /* sits inside the file card */
+    border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
+    border-left: 3px solid var(--warn);
+    background: color-mix(in srgb, var(--warn) 10%, var(--bg-alt));
+  }
+  .warn-box b { color: var(--warn); }
+  .warn-item { padding-left: 14px; text-indent: -14px; }
+  .warn-item::before { content: '⚠ '; color: var(--warn); }
+
+  /* The sticky wrapper carries the page background so scrolled content
+     cannot show through the bar's own margin. */
+  .dirty-wrap {
     position: sticky;
     top: 0;
-    background: var(--bg);
     z-index: 5;
+    padding: 8px 0;
+    background: var(--bg);
   }
-  .error { border: 1px solid var(--fail); color: var(--fail); }
-  .warn-box { border: 1px solid #d9a53f; color: #d9a53f; }
+  .dirty-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
+    border-left: 3px solid var(--warn);
+    background: color-mix(in srgb, var(--warn) 12%, var(--bg-alt));
+    box-shadow: 0 6px 14px -8px rgb(0 0 0 / 0.5);
+  }
+  .dirty-text { flex: 1; min-width: 0; }
+  .dirty-title {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: bold;
+    color: var(--fg);
+  }
+  .dirty-title code {
+    font-weight: normal;
+    font-size: 12px;
+    background: color-mix(in srgb, var(--warn) 18%, transparent);
+    color: var(--warn);
+  }
+  .dirty-note {
+    margin-top: 3px;
+    font-size: 12px;
+    color: var(--fg-dim);
+  }
+  .dirty-bar .save { white-space: nowrap; }
+
+  .dot {
+    width: 8px;
+    height: 8px;
+    flex: none;
+    border-radius: 50%;
+    background: var(--warn);
+    animation: pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    50% { opacity: 0.25; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .dot { animation: none; }
+  }
 
   .result {
     margin: 8px 0;
@@ -358,17 +439,22 @@
   }
   .filehead h3 { margin: 0; font-size: 13px; flex: 1; }
   .filehead.unsaved {
-    border-bottom-color: #d9a53f;
-    background: color-mix(in srgb, #d9a53f 7%, transparent);
+    border-bottom-color: color-mix(in srgb, var(--warn) 55%, transparent);
+    background: color-mix(in srgb, var(--warn) 10%, transparent);
   }
   .unsaved-badge {
-    color: #d9a53f;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 9px;
+    border-radius: 10px;
     font-size: 11px;
-    animation: pulse 1.2s ease-in-out infinite;
+    white-space: nowrap;
+    color: var(--warn);
+    background: color-mix(in srgb, var(--warn) 15%, transparent);
+    border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
   }
-  @keyframes pulse {
-    50% { opacity: 0.4; }
-  }
+  .unsaved-badge .dot { width: 6px; height: 6px; }
   .save {
     background: var(--ok);
     border-color: var(--ok);
@@ -376,6 +462,15 @@
     font-weight: bold;
   }
   .save:hover { filter: brightness(1.15); background: var(--ok); }
+
+  .add {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    font-weight: bold;
+    white-space: nowrap;
+  }
+  .add:hover { filter: brightness(1.15); background: var(--accent); }
 
   .lines { padding: 6px 8px; }
   .entry {

@@ -48,6 +48,13 @@
     onchange?.(raw)
   }
 
+  // Отмена у только что добавленного правила убирает и саму строку —
+  // иначе в файле остаётся пустышка, и он числится изменённым.
+  function cancel() {
+    if (isNew) ondelete?.()
+    else editing = false
+  }
+
   function togglePerm(c) {
     form.perms = form.perms.includes(c)
       ? form.perms.replace(c, '')
@@ -116,7 +123,7 @@
         <div class="row">
           <code class="preview">{generate(form) || '…'}</code>
           <button class="ok-btn" onclick={apply} disabled={!generate(form)}>Готово</button>
-          <button onclick={() => (editing = false)}>Отмена</button>
+          <button onclick={cancel}>Отмена</button>
         </div>
       </div>
     {/if}

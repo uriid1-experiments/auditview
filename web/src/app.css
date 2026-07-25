@@ -8,6 +8,7 @@
   --accent: #4da3ff;
   --ok: #4fc38a;
   --fail: #ff6b6b;
+  --warn: #e3b341;
   --chip-bg: #1d2733;
   font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, 'Cascadia Code', Menlo, monospace;
   font-size: 13px;
@@ -24,6 +25,7 @@
     --accent: #0969da;
     --ok: #1a7f4f;
     --fail: #c53030;
+    --warn: #9a6700;
     --chip-bg: #e7edf3;
   }
 }
