@@ -61,9 +61,9 @@ func Load(path string) (*Config, error) {
 	if os.IsNotExist(err) {
 		cfg := defaultConfig()
 		if werr := writeDefault(path, cfg); werr != nil {
-			return nil, fmt.Errorf("не удалось создать конфиг %s: %w", path, werr)
+			return nil, fmt.Errorf("cannot create config %s: %w", path, werr)
 		}
-		log.Printf("alert: создан конфиг по умолчанию: %s", path)
+		log.Printf("alert: created default config: %s", path)
 		return cfg, nil
 	}
 	if err != nil {
@@ -86,12 +86,12 @@ func defaultConfig() *Config {
 			Command:  CommandCfg{},
 		},
 		Rules: []Rule{
-			{Name: "Чтение SSH-ключей", Keys: []string{"cred_ssh"}, CooldownSec: 60},
-			{Name: "Чтение VPN-конфигов", Keys: []string{"cred_vpn"}, CooldownSec: 60},
-			{Name: "Закрепление в системе", Keys: []string{
+			{Name: "SSH key read", Keys: []string{"cred_ssh"}, CooldownSec: 60},
+			{Name: "VPN config read", Keys: []string{"cred_vpn"}, CooldownSec: 60},
+			{Name: "Persistence", Keys: []string{
 				"persist_systemd", "persist_systemd_user", "persist_cron",
 				"persist_preload", "persist_profile"}, CooldownSec: 10},
-			{Name: "Чтение истории shell", Keys: []string{"shell_history"},
+			{Name: "Shell history read", Keys: []string{"shell_history"},
 				CooldownSec: 300, Disabled: true},
 		},
 	}
@@ -140,22 +140,22 @@ func (m *Msg) action() string {
 	return m.Exe
 }
 
-// desktop: локальная нотификация, машина не нужна
+// desktop: local notification, the host name is not needed
 func (m *Msg) desktopTitle() string { return "auditview: " + m.Rule }
 
 func (m *Msg) desktopBody() string {
 	if m.Test {
-		return "Тестовое уведомление — каналы работают."
+		return "Test notification — channels are working."
 	}
-	return fmt.Sprintf("%s\n%s\nпользователь: %s", m.Key, m.action(), m.User)
+	return fmt.Sprintf("%s\n%s\nuser: %s", m.Key, m.action(), m.User)
 }
 
-// telegram: формат под несколько машин
+// telegram: format suited to several hosts
 func (m *Msg) telegramText() string {
 	if m.Test {
-		return fmt.Sprintf("⚠️ [auditview] Тест\nМашина: %s\nТестовое уведомление — каналы работают.", m.Host)
+		return fmt.Sprintf("⚠️ [auditview] Test\nHost: %s\nTest notification — channels are working.", m.Host)
 	}
-	return fmt.Sprintf("⚠️ [auditview] %s\nМашина: %s\nПользователь: %s\nСобытие: %s\nДействие: %s",
+	return fmt.Sprintf("⚠️ [auditview] %s\nHost: %s\nUser: %s\nEvent: %s\nAction: %s",
 		m.Rule, m.Host, m.User, m.Key, m.action())
 }
 
@@ -223,7 +223,7 @@ func (e *Engine) fire(r *Rule, it *store.Item) {
 		Exe: it.Process.Exe, Object: object, EventID: it.ID,
 	}
 	if err := e.Store.AddAlert(a); err != nil {
-		log.Printf("alert: запись в БД: %v", err)
+		log.Printf("alert: db write: %v", err)
 	}
 	msg := &Msg{
 		Rule: r.Name, Key: key, Exe: it.Process.Exe, Object: object,
@@ -239,7 +239,7 @@ func (e *Engine) fire(r *Rule, it *store.Item) {
 
 // SendTest pushes a test notification through all enabled channels.
 func (e *Engine) SendTest() string {
-	return e.deliver(&Msg{Rule: "тест", Host: e.hostname, Test: true})
+	return e.deliver(&Msg{Rule: "test", Host: e.hostname, Test: true})
 }
 
 func (e *Engine) deliver(msg *Msg) string {
@@ -255,7 +255,7 @@ func (e *Engine) deliver(msg *Msg) string {
 		results = append(results, "command: "+errStr(e.sendCommand(msg)))
 	}
 	if len(results) == 0 {
-		return "нет включённых каналов"
+		return "no channels enabled"
 	}
 	res := strings.Join(results, "; ")
 	log.Printf("alert: %s — %s", msg.Rule, res)
@@ -264,7 +264,7 @@ func (e *Engine) deliver(msg *Msg) string {
 
 func errStr(err error) string {
 	if err != nil {
-		return "ошибка: " + err.Error()
+		return "error: " + err.Error()
 	}
 	return "ok"
 }
@@ -274,7 +274,7 @@ func errStr(err error) string {
 func (e *Engine) sendDesktop(msg *Msg) error {
 	cfg := e.Cfg.Channels.Desktop
 	if cfg.User == "" {
-		return fmt.Errorf("не задан user")
+		return fmt.Errorf("user not set")
 	}
 	u, err := user.Lookup(cfg.User)
 	if err != nil {
@@ -297,7 +297,7 @@ func (e *Engine) sendDesktop(msg *Msg) error {
 func (e *Engine) sendTelegram(msg *Msg) error {
 	cfg := e.Cfg.Channels.Telegram
 	if cfg.Token == "" || cfg.ChatID == "" {
-		return fmt.Errorf("не заданы token/chat_id")
+		return fmt.Errorf("token/chat_id not set")
 	}
 	cl := &http.Client{Timeout: 10 * time.Second}
 	resp, err := cl.PostForm("https://api.telegram.org/bot"+cfg.Token+"/sendMessage",
@@ -315,7 +315,7 @@ func (e *Engine) sendTelegram(msg *Msg) error {
 func (e *Engine) sendCommand(msg *Msg) error {
 	cfg := e.Cfg.Channels.Command
 	if cfg.Exec == "" {
-		return fmt.Errorf("не задан exec")
+		return fmt.Errorf("exec not set")
 	}
 	cmd := exec.Command(cfg.Exec)
 	cmd.Env = append(os.Environ(),

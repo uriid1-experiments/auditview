@@ -81,7 +81,7 @@ func main() {
 			if n, err := st.Purge(time.Duration(*retainDays) * 24 * time.Hour); err != nil {
 				log.Printf("purge: %v", err)
 			} else if n > 0 {
-				log.Printf("purge: удалено %d событий старше %d дней", n, *retainDays)
+				log.Printf("purge: deleted %d events older than %d days", n, *retainDays)
 			}
 			time.Sleep(24 * time.Hour)
 		}

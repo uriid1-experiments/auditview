@@ -1,5 +1,6 @@
 <script>
   import { appendNoiseRule, fetchEventDetail, keyHue } from './api.js'
+  import { fmtTime, t } from './i18n.svelte.js'
 
   let { event, id } = $props()
 
@@ -21,10 +22,10 @@
   async function addMute() {
     try {
       const name = await appendNoiseRule(muteLine)
-      muteStatus = `✓ Добавлено в ${name}. Осталось: вкладка «Правила» → «Применить правила».`
+      muteStatus = t('row.muteAdded', { name })
       muteOpen = false
     } catch (e) {
-      muteStatus = 'Ошибка: ' + e
+      muteStatus = t('row.error', { error: e })
     }
   }
 
@@ -34,16 +35,9 @@
       try {
         detail = await fetchEventDetail(id)
       } catch {
-        detail = { raw: ['(не удалось загрузить сырые записи)'] }
+        detail = { raw: [t('row.rawFailed')] }
       }
     }
-  }
-
-  function fmtTime(ts) {
-    return new Date(ts).toLocaleString('ru-RU', {
-      day: '2-digit', month: '2-digit',
-      hour: '2-digit', minute: '2-digit', second: '2-digit',
-    })
   }
 
   const summary = $derived.by(() => {
@@ -77,7 +71,7 @@
       <div class="detail">
         <div class="grid">
           <section>
-            <h4>Процесс</h4>
+            <h4>{t('row.process')}</h4>
             <dl>
               <dt>exe</dt><dd><code>{event.process?.exe ?? '—'}</code></dd>
               <dt>cmdline</dt><dd><code>{event.process?.title ?? '—'}</code></dd>
@@ -87,25 +81,25 @@
             </dl>
           </section>
           <section>
-            <h4>Пользователь</h4>
+            <h4>{t('row.user')}</h4>
             <dl>
               <dt>uid</dt><dd>{event.user?.names?.uid ?? event.user?.ids?.uid ?? '—'}</dd>
-              <dt>auid (кто залогинился)</dt><dd>{event.user?.names?.auid ?? event.user?.ids?.auid ?? '—'}</dd>
+              <dt>{t('row.auid')}</dt><dd>{event.user?.names?.auid ?? event.user?.ids?.auid ?? '—'}</dd>
               <dt>euid</dt><dd>{event.user?.names?.euid ?? event.user?.ids?.euid ?? '—'}</dd>
             </dl>
-            <h4>Syscall</h4>
+            <h4>{t('row.syscall')}</h4>
             <dl>
-              <dt>вызов</dt><dd>{event.data?.syscall ?? event.record_type}</dd>
-              <dt>результат</dt><dd>{event.result} (exit={event.data?.exit ?? '—'})</dd>
+              <dt>{t('row.call')}</dt><dd>{event.data?.syscall ?? event.record_type}</dd>
+              <dt>{t('row.result')}</dt><dd>{event.result} (exit={event.data?.exit ?? '—'})</dd>
               <dt>seq</dt><dd>{event.sequence}</dd>
             </dl>
           </section>
         </div>
 
         {#if event.paths?.length}
-          <h4>Файлы</h4>
+          <h4>{t('row.files')}</h4>
           <table class="paths">
-            <thead><tr><th>путь</th><th>тип</th><th>mode</th><th>владелец</th><th>inode</th></tr></thead>
+            <thead><tr><th>{t('row.path')}</th><th>{t('row.type')}</th><th>mode</th><th>{t('row.owner')}</th><th>inode</th></tr></thead>
             <tbody>
               {#each event.paths as p}
                 <tr>
@@ -121,25 +115,22 @@
         {/if}
 
         {#if detail?.raw?.length}
-          <h4>Сырые записи</h4>
+          <h4>{t('row.raw')}</h4>
           <pre class="raw">{detail.raw.join('\n')}</pre>
         {/if}
 
         <div class="mute">
           {#if !muteOpen}
             <button class="mute-btn" onclick={(e) => { e.stopPropagation(); openMute() }}>
-              🔇 Заглушить
+              {t('row.mute')}
             </button>
           {:else}
             <div class="mute-form">
-              <div class="mute-hint">
-                Эта программа больше не будет создавать события по этому пути
-                (другие программы — будут). Строку можно поправить:
-              </div>
+              <div class="mute-hint">{t('row.muteHint')}</div>
               <input class="mute-line" bind:value={muteLine} spellcheck="false" />
               <div class="mute-actions">
-                <button class="ok-btn" onclick={addMute}>Добавить исключение</button>
-                <button onclick={() => (muteOpen = false)}>Отмена</button>
+                <button class="ok-btn" onclick={addMute}>{t('row.addExclusion')}</button>
+                <button onclick={() => (muteOpen = false)}>{t('common.cancel')}</button>
               </div>
             </div>
           {/if}

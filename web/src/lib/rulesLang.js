@@ -1,15 +1,15 @@
-// Перевод правил auditd в человеческий язык и обратно.
+// Translating auditd rules into plain language and back.
+import { t, data } from './i18n.svelte.js'
 
-export const PERMS = [
-  ['r', 'чтение'],
-  ['w', 'изменение'],
-  ['x', 'запуск'],
-  ['a', 'атрибуты'],
-]
-const PERM_MAP = Object.fromEntries(PERMS)
+export const PERM_CODES = ['r', 'w', 'x', 'a']
 
-export function permWords(perms) {
-  return [...(perms || '')].map((c) => PERM_MAP[c] ?? c).join(', ')
+// [code, label] pairs in the current UI language.
+export function perms() {
+  return PERM_CODES.map((c) => [c, t('perm.' + c)])
+}
+
+export function permWords(p) {
+  return [...(p || '')].map((c) => (PERM_CODES.includes(c) ? t('perm.' + c) : c)).join(', ')
 }
 
 export function baseName(p) {
@@ -17,7 +17,7 @@ export function baseName(p) {
   return parts[parts.length - 1] || p
 }
 
-// Правило можно редактировать формой, если мы понимаем все его части.
+// A rule can be edited with the form only if we understand all of its parts.
 export function editable(e) {
   if (e.kind !== 'watch' && e.kind !== 'syscall') return false
   if (e.err || !e.path) return false
@@ -27,27 +27,27 @@ export function editable(e) {
   return extra.length === 0
 }
 
-// Человеческая фраза для карточки. null → показывать сырую строку.
+// Human phrase for the card. null → show the raw line.
 export function describe(e) {
   if (!editable(e)) return null
-  const scope = e.path_kind === 'dir' ? ' (весь каталог)' : ''
+  const scope = e.path_kind === 'dir' ? t('lang.wholeDir') : ''
   if (e.action === 'never') {
-    const who = e.fields?.exe ? baseName(e.fields.exe) : 'любая программа'
-    const acts = e.perms ? permWords(e.perms) : 'любое обращение'
+    const who = e.fields?.exe ? baseName(e.fields.exe) : t('lang.anyProgram')
+    const acts = e.perms ? permWords(e.perms) : t('lang.anyAccess')
     return {
       icon: '🔇',
-      text: `Без событий: ${who} — ${acts}: ${e.path}${scope}`,
+      text: t('lang.noEvents', { who, acts, path: e.path, scope }),
     }
   }
   const acts = permWords(e.perms || 'rwxa')
   return {
     icon: '👁',
-    text: `Следить: ${acts} — ${e.path}${scope}`,
+    text: t('lang.watch', { acts, path: e.path, scope }),
     key: e.key || '',
   }
 }
 
-// Значения формы из распарсенного правила.
+// Form values from a parsed rule.
 export function formFrom(e) {
   return {
     action: e.action === 'never' ? 'never' : 'always',
@@ -59,7 +59,7 @@ export function formFrom(e) {
   }
 }
 
-// Строка правила из значений формы.
+// Rule line from form values.
 export function generate(f) {
   const path = f.path.trim()
   if (!path) return ''
@@ -82,28 +82,25 @@ export function generate(f) {
   return l
 }
 
-// Шпаргалка по флагам для режима эксперта.
-export const FLAG_LEGEND = [
-  ['-w ПУТЬ', 'следить за этим файлом/каталогом'],
-  ['-p rwxa', 'какие действия ловить: r чтение, w изменение, x запуск, a атрибуты'],
-  ['-k МЕТКА', 'метка события (ключ) — по ней фильтры и алерты'],
-  ['-a always,exit', 'создавать событие (обычное правило слежения)'],
-  ['-a never,exit', 'НЕ создавать событие — исключение; должно стоять выше always-правил'],
-  ['-F dir=ПУТЬ', 'каталог со всем содержимым'],
-  ['-F path=ПУТЬ', 'ровно этот объект (файл или сам каталог, без содержимого)'],
-  ['-F perm=rwxa', 'то же, что -p, для формы -a'],
-  ['-F exe=ПУТЬ', 'только когда действует эта программа'],
-  ['-S вызов', 'какие системные вызовы (all — любые)'],
+// Flag cheat sheet for expert mode, in the current language.
+export function flagLegend() {
+  return data('legend')
+}
+
+// Ready-made templates for the rule builder. auditd needs absolute paths,
+// so home-relative recipes carry a USER placeholder to replace.
+const RECIPE_FORMS = [
+  { action: 'always', scope: 'exact', path: '', perms: 'r', key: 'cred_', exe: '' },
+  { action: 'always', scope: 'dir', path: '', perms: 'r', key: 'cred_', exe: '' },
+  { action: 'always', scope: 'dir', path: '', perms: 'wa', key: 'persist_', exe: '' },
+  { action: 'always', scope: 'exact', path: '/home/USER/.docker/config.json', perms: 'r', key: 'cred_docker', exe: '' },
+  { action: 'always', scope: 'exact', path: '/home/USER/.npmrc', perms: 'r', key: 'cred_npm', exe: '' },
+  { action: 'always', scope: 'exact', path: '/home/USER/.kube/config', perms: 'r', key: 'cred_kube', exe: '' },
+  { action: 'always', scope: 'dir', path: '/home/USER/.gnupg', perms: 'r', key: 'cred_gpg', exe: '' },
+  { action: 'never', scope: 'exact', path: '', perms: 'r', key: '', exe: '' },
 ]
 
-// Готовые заготовки для конструктора.
-export const RECIPES = [
-  { label: 'Чтение секрета (файл)', f: { action: 'always', scope: 'exact', path: '', perms: 'r', key: 'cred_', exe: '' } },
-  { label: 'Чтение секретов (каталог)', f: { action: 'always', scope: 'dir', path: '', perms: 'r', key: 'cred_', exe: '' } },
-  { label: 'Изменение конфигов (каталог)', f: { action: 'always', scope: 'dir', path: '', perms: 'wa', key: 'persist_', exe: '' } },
-  { label: 'Docker-креды', f: { action: 'always', scope: 'exact', path: '/home/uriid1/.docker/config.json', perms: 'r', key: 'cred_docker', exe: '' } },
-  { label: 'npm-токен', f: { action: 'always', scope: 'exact', path: '/home/uriid1/.npmrc', perms: 'r', key: 'cred_npm', exe: '' } },
-  { label: 'kubeconfig', f: { action: 'always', scope: 'exact', path: '/home/uriid1/.kube/config', perms: 'r', key: 'cred_kube', exe: '' } },
-  { label: 'GPG-ключи (каталог)', f: { action: 'always', scope: 'dir', path: '/home/uriid1/.gnupg', perms: 'r', key: 'cred_gpg', exe: '' } },
-  { label: 'Заглушить программу для пути', f: { action: 'never', scope: 'exact', path: '', perms: 'r', key: '', exe: '' } },
-]
+export function recipes() {
+  const labels = data('recipes')
+  return RECIPE_FORMS.map((f, i) => ({ label: labels[i], f }))
+}

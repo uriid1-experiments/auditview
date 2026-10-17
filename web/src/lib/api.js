@@ -1,3 +1,5 @@
+import { t } from './i18n.svelte.js'
+
 export async function fetchEvents(filters, beforeId = null) {
   const params = new URLSearchParams()
   for (const [k, v] of Object.entries(filters)) {
@@ -38,7 +40,7 @@ export function openStream(onEvent) {
 // Returns the file name it landed in.
 export async function appendNoiseRule(line) {
   const name = '00-noise-exclusions.rules'
-  let content = '# Подавление легитимного шума (never-правила, грузятся первыми)\n'
+  let content = t('noise.header') + '\n'
   const res = await fetch(`/api/rules/${name}`)
   if (res.ok) content = (await res.json()).content
   if (!content.endsWith('\n')) content += '\n'

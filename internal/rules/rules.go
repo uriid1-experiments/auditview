@@ -43,7 +43,7 @@ var nameRe = regexp.MustCompile(`^[a-zA-Z0-9._-]+\.rules$`)
 
 func (m *Manager) safePath(name string) (string, error) {
 	if !nameRe.MatchString(name) || strings.Contains(name, "..") {
-		return "", fmt.Errorf("недопустимое имя файла: %q", name)
+		return "", fmt.Errorf("invalid file name: %q", name)
 	}
 	return filepath.Join(m.Dir, name), nil
 }
@@ -86,7 +86,7 @@ func (m *Manager) Write(name, content string) error {
 	}
 	if old, err := os.ReadFile(p); err == nil {
 		if err := os.WriteFile(p+".bak", old, 0o640); err != nil {
-			return fmt.Errorf("бэкап не записался, отмена: %w", err)
+			return fmt.Errorf("backup failed, aborting: %w", err)
 		}
 	}
 	if !strings.HasSuffix(content, "\n") && content != "" {
@@ -112,7 +112,7 @@ func Validate(content string) []string {
 	var problems []string
 	for _, e := range Parse(content) {
 		if e.Err != "" {
-			problems = append(problems, fmt.Sprintf("строка %d: %s (%s)", e.Line, e.Err, e.Raw))
+			problems = append(problems, fmt.Sprintf("line %d: %s (%s)", e.Line, e.Err, e.Raw))
 		}
 	}
 	return problems
@@ -129,7 +129,7 @@ type ApplyResult struct {
 func run(name string, args ...string) (string, error) {
 	path, err := exec.LookPath(name)
 	if err != nil {
-		return "", fmt.Errorf("%s не найден: %w", name, err)
+		return "", fmt.Errorf("%s not found: %w", name, err)
 	}
 	out, err := exec.Command(path, args...).CombinedOutput()
 	return strings.TrimSpace(string(out)), err
@@ -148,7 +148,7 @@ func (m *Manager) relativePaths() []string {
 	for _, f := range files {
 		for _, e := range f.Entries {
 			if e.Path != "" && !filepath.IsAbs(e.Path) {
-				bad = append(bad, fmt.Sprintf("%s, строка %d: %s", f.Name, e.Line, strings.TrimSpace(e.Raw)))
+				bad = append(bad, fmt.Sprintf("%s, line %d: %s", f.Name, e.Line, strings.TrimSpace(e.Raw)))
 			}
 		}
 	}
@@ -159,8 +159,8 @@ func (m *Manager) relativePaths() []string {
 func (m *Manager) Apply() *ApplyResult {
 	res := &ApplyResult{}
 	if bad := m.relativePaths(); len(bad) > 0 {
-		res.Output = "не загружено, иначе часть правил молча пропала бы из ядра.\n" +
-			"путь в -w/-F path=/-F dir= должен быть абсолютным:\n" + strings.Join(bad, "\n")
+		res.Output = "not loaded: some rules would silently vanish from the kernel.\n" +
+			"paths in -w/-F path=/-F dir= must be absolute:\n" + strings.Join(bad, "\n")
 		res.Loaded, res.Status, res.CheckOutput = m.live()
 		return res
 	}
@@ -241,7 +241,7 @@ func parseLine(s string) *Entry {
 		return &Entry{Kind: "other"}
 	}
 	if e.Err == "" && e.Path != "" && !filepath.IsAbs(e.Path) {
-		e.Err = "путь должен быть абсолютным: " + e.Path
+		e.Err = "path must be absolute: " + e.Path
 	}
 	return e
 }
@@ -266,7 +266,7 @@ func parseWatch(tok []string) *Entry {
 			if e.Path == "" && !strings.HasPrefix(tok[i], "-") {
 				e.Path = tok[i]
 			} else {
-				e.Err = "неизвестный параметр " + tok[i]
+				e.Err = "unknown parameter " + tok[i]
 			}
 		}
 	}
@@ -274,7 +274,7 @@ func parseWatch(tok []string) *Entry {
 		e.Path = tok[1]
 	}
 	if e.Path == "" {
-		e.Err = "нет пути"
+		e.Err = "missing path"
 	}
 	return e
 }
@@ -282,7 +282,7 @@ func parseWatch(tok []string) *Entry {
 func parseSyscall(tok []string) *Entry {
 	e := &Entry{Kind: "syscall", Fields: map[string]string{}}
 	if len(tok) < 2 {
-		return &Entry{Kind: "syscall", Err: "нет action,list"}
+		return &Entry{Kind: "syscall", Err: "missing action,list"}
 	}
 	parts := strings.SplitN(tok[1], ",", 2)
 	e.Action = parts[0]
@@ -291,14 +291,14 @@ func parseSyscall(tok []string) *Entry {
 		if len(parts) == 2 && (parts[1] == "always" || parts[1] == "never") {
 			e.Action = parts[1]
 		} else {
-			e.Err = "неизвестное действие " + tok[1]
+			e.Err = "unknown action " + tok[1]
 		}
 	}
 	for i := 2; i < len(tok); i++ {
 		switch tok[i] {
 		case "-F":
 			if i+1 >= len(tok) {
-				e.Err = "-F без значения"
+				e.Err = "-F without a value"
 				continue
 			}
 			i++
@@ -335,7 +335,7 @@ func parseSyscall(tok []string) *Entry {
 				e.Fields["compare"] = tok[i]
 			}
 		default:
-			e.Err = "неизвестный параметр " + tok[i]
+			e.Err = "unknown parameter " + tok[i]
 		}
 	}
 	if len(e.Fields) == 0 {

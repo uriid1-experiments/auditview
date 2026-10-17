@@ -1,6 +1,7 @@
 <script>
   import { keyHue } from './api.js'
   import { createColResize } from './colResize.svelte.js'
+  import { fmtTime, t } from './i18n.svelte.js'
 
   const cols = createColResize({
     defaults: { time: 130, rule: 220, key: 140, exe: 220, object: 0, sent: 200 },
@@ -47,34 +48,36 @@
     testing = false
   }
 
-  function fmtTime(ms) {
-    return new Date(ms).toLocaleString('ru-RU', {
-      day: '2-digit', month: '2-digit',
-      hour: '2-digit', minute: '2-digit', second: '2-digit',
-    })
-  }
-
   const channels = $derived.by(() => {
     if (!config?.channels) return []
     const c = config.channels
     return [
-      ['рабочий стол' + (c.desktop?.user ? ` (${c.desktop.user})` : ''), c.desktop?.enabled],
+      [t('alerts.desktop') + (c.desktop?.user ? ` (${c.desktop.user})` : ''), c.desktop?.enabled],
       ['telegram', c.telegram?.enabled],
-      ['команда', c.command?.enabled],
+      [t('alerts.command'), c.command?.enabled],
     ]
   })
+
+  const columns = $derived([
+    ['time', t('col.time')],
+    ['rule', t('col.rule')],
+    ['key', t('col.key')],
+    ['exe', t('col.process')],
+    ['object', t('col.object')],
+    ['sent', t('col.delivery')],
+  ])
 </script>
 
 <div class="alerts">
   <div class="topbar">
     <div class="channels">
       {#each channels as [name, on]}
-        <span class="badge" class:ok={on}>{name}: {on ? 'вкл' : 'выкл'}</span>
+        <span class="badge" class:ok={on}>{name}: {on ? t('alerts.on') : t('alerts.off')}</span>
       {/each}
     </div>
     <span class="spacer"></span>
     <button onclick={sendTest} disabled={testing}>
-      {testing ? 'отправляется…' : 'Тестовое уведомление'}
+      {testing ? t('alerts.sending') : t('alerts.test')}
     </button>
   </div>
 
@@ -83,14 +86,14 @@
 
   {#if config?.rules}
     <details class="rules-cfg">
-      <summary>Правила алертинга ({config.rules.filter((r) => !r.disabled).length} активных) — правятся в /etc/auditview/alerts.json</summary>
+      <summary>{t('alerts.rulesSummary', { n: config.rules.filter((r) => !r.disabled).length })}</summary>
       <ul>
         {#each config.rules as r}
           <li class:off={r.disabled}>
-            <b>{r.name}</b> — ключи: {r.keys.join(', ')}
-            · кулдаун {r.cooldown_sec}с
-            {#if r.exclude_exe?.length} · кроме exe: {r.exclude_exe.join(', ')}{/if}
-            {#if r.disabled} · <i>выключено</i>{/if}
+            <b>{r.name}</b> — {t('alerts.keys')} {r.keys.join(', ')}
+            · {t('alerts.cooldown', { n: r.cooldown_sec })}
+            {#if r.exclude_exe?.length} · {t('alerts.exceptExe')} {r.exclude_exe.join(', ')}{/if}
+            {#if r.disabled} · <i>{t('alerts.disabled')}</i>{/if}
           </li>
         {/each}
       </ul>
@@ -109,8 +112,8 @@
     </colgroup>
     <thead>
       <tr>
-        {#each [['time', 'время'], ['rule', 'правило'], ['key', 'ключ'], ['exe', 'процесс'], ['object', 'объект'], ['sent', 'доставка']] as [k, label]}
-          <th ondblclick={cols.reset} title="тяните за правую границу; двойной клик — сброс ширин">
+        {#each columns as [k, label]}
+          <th ondblclick={cols.reset} title={t('col.hint')}>
             {label}
             {#if k !== 'sent'}
               <span class="grip" onpointerdown={(e) => cols.startDrag(e, k)}></span>
@@ -135,7 +138,7 @@
   </div>
 
   {#if !alerts.length && !error}
-    <div class="empty">Срабатываний пока не было</div>
+    <div class="empty">{t('alerts.empty')}</div>
   {/if}
 </div>
 

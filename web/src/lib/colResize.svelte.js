@@ -1,5 +1,5 @@
-// Перетаскиваемые границы колонок таблицы (стиль Wireshark):
-// двигается только граница между двумя соседними колонками.
+// Draggable table column borders (Wireshark style): only the border
+// between two adjacent columns moves.
 export function createColResize({ defaults, order, storageKey, min = 60 }) {
   let colW = $state(load())
 
@@ -7,7 +7,7 @@ export function createColResize({ defaults, order, storageKey, min = 60 }) {
     try {
       const saved = JSON.parse(localStorage.getItem(storageKey))
       if (saved && typeof saved === 'object') return { ...defaults, ...saved }
-    } catch { /* повреждённый localStorage — берём умолчания */ }
+    } catch { /* corrupt localStorage — fall back to defaults */ }
     return { ...defaults }
   }
 

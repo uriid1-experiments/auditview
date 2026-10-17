@@ -10,9 +10,9 @@ ExecStart=/usr/local/bin/auditview
 Restart=on-failure
 RestartSec=5
 
-# Работает от root: чтение /var/log/audit, правка /etc/audit/rules.d,
-# запись /var/lib/auditview. NoNewPrivileges нельзя — desktop-канал
-# алертов использует sudo -u для notify-send в сессию пользователя.
+# Runs as root: reads /var/log/audit, edits /etc/audit/rules.d, writes
+# /var/lib/auditview. NoNewPrivileges is not an option: the desktop alert
+# channel uses sudo -u to run notify-send inside the user session.
 ProtectHome=read-only
 PrivateTmp=true
 

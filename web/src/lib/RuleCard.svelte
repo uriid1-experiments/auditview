@@ -1,20 +1,21 @@
 <script>
   import { keyHue } from './api.js'
-  import { PERMS, RECIPES, describe, editable, formFrom, generate } from './rulesLang.js'
+  import { t } from './i18n.svelte.js'
+  import { perms, recipes, describe, editable, formFrom, generate } from './rulesLang.js'
 
   let { entry, onchange, ondelete } = $props()
 
-  // Локальное представление: после правки формой карточка показывает
-  // новое состояние до сохранения файла (сервер перепарсит при save).
+  // Local view: after a form edit the card shows the new state until the
+  // file is saved (the server re-parses on save).
   let view = $state({ ...entry })
-  // Свежедобавленная пустая строка сразу открывается формой
+  // A freshly added empty line opens the form right away
   const isNew = entry.raw === '' && entry.kind !== 'blank' && entry.kind !== 'comment'
   let editing = $state(isNew)
   let form = $state(formFrom(entry))
   let recipe = $state(-1)
 
   function pickRecipe() {
-    if (recipe >= 0) form = { ...RECIPES[recipe].f }
+    if (recipe >= 0) form = { ...recipes()[recipe].f }
   }
 
   const desc = $derived(describe(view))
@@ -48,8 +49,8 @@
     onchange?.(raw)
   }
 
-  // Отмена у только что добавленного правила убирает и саму строку —
-  // иначе в файле остаётся пустышка, и он числится изменённым.
+  // Cancelling a just-added rule removes the line itself — otherwise an
+  // empty placeholder stays in the file and marks it as modified.
   function cancel() {
     if (isNew) ondelete?.()
     else editing = false
@@ -58,7 +59,7 @@
   function togglePerm(c) {
     form.perms = form.perms.includes(c)
       ? form.perms.replace(c, '')
-      : PERMS.map(([p]) => p).filter((p) => form.perms.includes(p) || p === c).join('')
+      : perms().map(([p]) => p).filter((p) => form.perms.includes(p) || p === c).join('')
   }
 </script>
 
@@ -70,7 +71,7 @@
   <div class="card" class:never={view.action === 'never'} class:editing>
     {#if !editing}
       <button class="face" class:clickable={canEdit} onclick={startEdit}
-        title={canEdit ? 'нажмите, чтобы изменить' : 'правится только в режиме эксперта'}>
+        title={canEdit ? t('card.clickToEdit') : t('card.expertOnly')}>
         {#if desc}
           <span class="icon">{desc.icon}</span>
           <span class="text">{desc.text}</span>
@@ -82,14 +83,14 @@
           <code class="text rawline">{view.raw}</code>
         {/if}
       </button>
-      <button class="del" title="удалить правило" onclick={() => ondelete?.()}>✕</button>
+      <button class="del" title={t('card.deleteRule')} onclick={() => ondelete?.()}>✕</button>
     {:else}
       <div class="form">
         {#if isNew}
           <div class="row">
             <select bind:value={recipe} onchange={pickRecipe}>
-              <option value={-1}>— рецепт (не обязательно) —</option>
-              {#each RECIPES as r, i}
+              <option value={-1}>{t('card.recipe')}</option>
+              {#each recipes() as r, i}
                 <option value={i}>{r.label}</option>
               {/each}
             </select>
@@ -97,33 +98,33 @@
         {/if}
         <div class="row">
           <select bind:value={form.action}>
-            <option value="always">👁 Следить</option>
-            <option value="never">🔇 Исключение (без событий)</option>
+            <option value="always">{t('card.watch')}</option>
+            <option value="never">{t('card.never')}</option>
           </select>
-          <input class="grow" placeholder="путь" bind:value={form.path} spellcheck="false" />
+          <input class="grow" placeholder={t('card.path')} bind:value={form.path} spellcheck="false" />
           <select bind:value={form.scope}>
-            <option value="exact">точный путь</option>
-            <option value="dir">каталог + содержимое</option>
+            <option value="exact">{t('card.exact')}</option>
+            <option value="dir">{t('card.dir')}</option>
           </select>
         </div>
         <div class="row">
           <span class="perms">
-            ловить:
-            {#each PERMS as [c, label]}
+            {t('card.catch')}
+            {#each perms() as [c, label]}
               <label><input type="checkbox" checked={form.perms.includes(c)}
                 onchange={() => togglePerm(c)} /> {label}</label>
             {/each}
           </span>
           {#if form.action === 'always'}
-            <input class="key-in" placeholder="метка, напр. cred_npm" bind:value={form.key} spellcheck="false" />
+            <input class="key-in" placeholder={t('card.keyPh')} bind:value={form.key} spellcheck="false" />
           {:else}
-            <input class="grow" placeholder="программа (пусто = любая), напр. /usr/bin/konsole" bind:value={form.exe} spellcheck="false" />
+            <input class="grow" placeholder={t('card.exePh')} bind:value={form.exe} spellcheck="false" />
           {/if}
         </div>
         <div class="row">
           <code class="preview">{generate(form) || '…'}</code>
-          <button class="ok-btn" onclick={apply} disabled={!generate(form)}>Готово</button>
-          <button onclick={cancel}>Отмена</button>
+          <button class="ok-btn" onclick={apply} disabled={!generate(form)}>{t('card.done')}</button>
+          <button onclick={cancel}>{t('common.cancel')}</button>
         </div>
       </div>
     {/if}

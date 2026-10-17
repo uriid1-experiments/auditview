@@ -1,65 +1,71 @@
 # auditview
 
-Локальный веб-интерфейс для просмотра логов auditd. Один бинарник:
-Go-бэкенд парсит `/var/log/audit/audit.log` (через elastic/go-libaudit —
-склейка многострочных событий, резолв uid/syscall), Svelte-фронтенд
-встроен через `embed.FS`.
+Local web UI for browsing auditd logs. A single binary: the Go backend
+parses `/var/log/audit/audit.log` (via elastic/go-libaudit — multi-record
+event coalescing, uid/syscall resolution), the Svelte frontend is embedded
+through `embed.FS`.
 
-## Возможности
+Russian documentation: [README.ru.md](README.ru.md). The UI language
+(English by default, Russian available) is switched in the ⚙ settings menu.
 
-- Живой хвост логов (SSE) с паузой
-- Фильтры: ключ правила (`-k`), exe, результат, текстовый поиск
-- Чипы по ключам с количеством событий
-- Раскрытие события: процесс, пользователь, syscall, затронутые файлы,
-  сырые записи
-- Читает и ротированные `audit.log.1..N` при старте
+## Features
 
-## Сборка
+- Live log tail (SSE) with pause
+- Filters: rule key (`-k`), exe, result, free-text search
+- Per-key chips with event counts
+- Event drill-down: process, user, syscall, touched files, raw records
+- Reads rotated `audit.log.1..N` on start
+- Rules editor for `/etc/audit/rules.d` with a form-based builder, expert
+  mode, syntax validation and one-click `augenrules --load`
+- Alerting on live events: desktop notifications, Telegram, custom command
+
+## Build
 
 ```sh
 cd web && npm install && npm run build && cd ..
 go build -o auditview ./cmd/auditview
 ```
 
-## Запуск
+## Run
 
-Чтение `/var/log/audit` требует root:
+Reading `/var/log/audit` requires root:
 
 ```sh
 sudo ./auditview
 # → http://127.0.0.1:8654
 ```
 
-Флаги: `-log` (путь к audit.log), `-addr` (по умолчанию `127.0.0.1:8654`
-— не выставляйте наружу: интерфейс без аутентификации), `-rotated`,
-`-keyless` (хранить и события без ключа правила — BPF, сервисы systemd
-и т.п.; по умолчанию отбрасываются на входе), `-db` (SQLite, по
-умолчанию `/var/lib/auditview/auditview.db`), `-retain` (дней истории,
-по умолчанию 90), `-alerts` (конфиг алертинга, по умолчанию
-`/etc/auditview/alerts.json`).
+Flags: `-log` (path to audit.log), `-addr` (default `127.0.0.1:8654` —
+do not expose it: the UI has no authentication), `-rotated`, `-keyless`
+(also keep events without a rule key — BPF, systemd service events and
+the like; dropped on ingest by default), `-rules-dir` (auditd rules.d
+directory, empty disables the editor), `-db` (SQLite, default
+`/var/lib/auditview/auditview.db`), `-retain` (days of history, default
+90), `-alerts` (alerting config, default `/etc/auditview/alerts.json`).
 
-## Хранение
+## Storage
 
-События пишутся в SQLite (чистый Go-драйвер, без cgo): история
-переживает перезапуски, при старте бэкфил из audit.log дедуплицируется
-по (ts, seq). Старше `-retain` дней — удаляются раз в сутки.
+Events are written to SQLite (pure-Go driver, no cgo): history survives
+restarts, and the startup backfill from audit.log is deduplicated by
+(ts, seq). Events older than `-retain` days are purged once a day.
 
-## Алертинг
+## Alerting
 
-Конфиг `/etc/auditview/alerts.json` создаётся при первом запуске:
-правила по ключам (cred_*, persist_* включены, shell_history выключен)
-с кулдауном на пару правило+exe. Каналы:
+The config `/etc/auditview/alerts.json` is created on first run: rules
+keyed on audit keys (cred_*, persist_* enabled, shell_history disabled)
+with a cooldown per rule+exe pair. Channels:
 
-- `desktop` — notify-send в сессию пользователя (user берётся из
-  SUDO_USER при создании конфига)
+- `desktop` — notify-send into the user's session (the user is taken
+  from SUDO_USER when the config is created)
 - `telegram` — token + chat_id
-- `command` — свой скрипт; данные в env `AV_TITLE`, `AV_BODY`
+- `command` — your own script; details arrive in env vars `AV_TITLE`,
+  `AV_BODY`, `AV_RULE`, `AV_KEY`, `AV_EXE`, `AV_OBJECT`, `AV_USER`, `AV_HOST`
 
-Алерты срабатывают только на живые события: исторический бэкфил при
-старте не алертит. Вкладка «Алерты» — журнал срабатываний со статусом
-доставки и тестовой кнопкой.
+Alerts fire only on live events: the historical backfill on startup never
+alerts. The "Alerts" tab is the log of firings with delivery status and a
+test button.
 
-## Автозапуск (systemd)
+## Autostart (systemd)
 
 ```sh
 sudo cp auditview /usr/local/bin/
@@ -68,27 +74,25 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now auditview
 ```
 
-После пересборки бинарника: `sudo cp auditview /usr/local/bin/ &&
-sudo systemctl restart auditview`.
-
-## Разработка
+After rebuilding, replace the binary atomically (a plain `cp` over the
+running file fails with "Text file busy"):
 
 ```sh
-sudo ./auditview &          # API на :8654
-cd web && npm run dev       # Vite dev-сервер с прокси на /api
+sudo cp auditview /usr/local/bin/auditview.new \
+  && sudo mv /usr/local/bin/auditview.new /usr/local/bin/auditview \
+  && sudo systemctl restart auditview
 ```
 
-## Редактор правил (вкладка «Правила»)
+## Development
 
-- Показывает все `*.rules` из `/etc/audit/rules.d` (порядок = порядок
-  склейки augenrules), строки размечаются чипами (never/perm/key)
-- Правка построчно, валидация поддерживаемого синтаксиса при сохранении,
-  прежняя версия остаётся рядом как `<файл>.bak`
-- Конструктор для типовых правил: «следить» (watch/dir) и «исключить шум»
-  (never по exe) — генерирует строку, остаётся только сохранить
-- «Применить правила» (двойной клик для подтверждения) = `augenrules
-  --load`; после — вывод, список загруженных правил, `auditctl -s`
-- Статус-бар: аудит включён/выключен, счётчик lost, синхронизированы ли
-  файлы с ядром (`augenrules --check`)
-- Флаг `-rules-dir` меняет каталог (пустое значение отключает редактор);
-  применение/статус всегда работают с системным auditd
+```sh
+sudo ./auditview &          # API on :8654
+cd web && npm run dev       # Vite dev server proxying /api
+```
+
+To try the UI without root, point every path at a scratch location:
+
+```sh
+./auditview -log /tmp/av/audit.log -db /tmp/av/av.db \
+  -alerts /tmp/av/alerts.json -rules-dir /tmp/av/rules.d
+```

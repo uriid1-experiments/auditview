@@ -1,6 +1,7 @@
 <script>
   import { fetchEvents, fetchMeta, openStream, keyHue } from './api.js'
   import { createColResize } from './colResize.svelte.js'
+  import { t } from './i18n.svelte.js'
   import EventRow from './EventRow.svelte'
 
   let events = $state([])
@@ -20,7 +21,7 @@
   let es = null
   let debounce = null
 
-  // Ширины колонок (px), перетаскиваются за границу в шапке
+  // Column widths (px), dragged at the header border
   const cols = createColResize({
     defaults: { time: 130, keys: 160, summary: 0, exe: 280, result: 90 },
     order: ['time', 'keys', 'summary', 'exe', 'result'],
@@ -87,15 +88,23 @@
   const sortedKeys = $derived(
     Object.entries(meta?.keys ?? {}).sort((a, b) => b[1] - a[1])
   )
+
+  const columns = $derived([
+    ['time', t('col.time')],
+    ['keys', t('col.key')],
+    ['summary', t('col.event')],
+    ['exe', t('col.process')],
+    ['result', t('col.result')],
+  ])
 </script>
 
 <div class="toolbar">
   <span class="stats">
-    {#if meta}{meta.total} событий в буфере{/if}
-    {#if total !== null && (key || exe || q || result)} · найдено: {total}{/if}
+    {#if meta}{t('events.stored', { n: meta.total })}{/if}
+    {#if total !== null && (key || exe || q || result)} · {t('events.found', { n: total })}{/if}
   </span>
   <button class="live" class:on={live} onclick={() => (live = !live)}>
-    {live ? '⏸ пауза' : '▶ live'}
+    {live ? t('events.pause') : t('events.live')}
   </button>
 </div>
 
@@ -111,27 +120,27 @@
 </div>
 
 <div class="filterbar">
-  <input placeholder="поиск (путь, команда, пользователь…)" bind:value={q} />
-  <input placeholder="фильтр по exe" bind:value={exe} list="exes" />
+  <input placeholder={t('events.search')} bind:value={q} />
+  <input placeholder={t('events.exeFilter')} bind:value={exe} list="exes" />
   <datalist id="exes">
     {#each meta?.top_exes ?? [] as e}<option value={e}></option>{/each}
   </datalist>
   <select bind:value={result}>
-    <option value="">результат: любой</option>
+    <option value="">{t('events.resultAny')}</option>
     <option value="success">success</option>
     <option value="fail">fail</option>
   </select>
   <label class="toggle">
     <input type="checkbox" bind:checked={keyedOnly} />
-    только правила
+    {t('events.keyedOnly')}
   </label>
   {#if key || exe || q || result}
-    <button onclick={() => { key = ''; exe = ''; q = ''; result = '' }}>сбросить</button>
+    <button onclick={() => { key = ''; exe = ''; q = ''; result = '' }}>{t('events.reset')}</button>
   {/if}
 </div>
 
 {#if error}
-  <div class="error">Ошибка API: {error}. Сервер запущен? (sudo ./auditview)</div>
+  <div class="error">{t('events.apiError', { error })}</div>
 {/if}
 
 <div class="tablewrap">
@@ -145,8 +154,8 @@
   </colgroup>
   <thead>
     <tr>
-      {#each [['time', 'время'], ['keys', 'ключ'], ['summary', 'событие'], ['exe', 'процесс'], ['result', 'результат']] as [k, label]}
-        <th ondblclick={cols.reset} title="тяните за правую границу; двойной клик — сброс ширин">
+      {#each columns as [k, label]}
+        <th ondblclick={cols.reset} title={t('col.hint')}>
           {label}
           {#if k !== 'result'}
             <span class="grip" onpointerdown={(e) => cols.startDrag(e, k)}></span>
@@ -165,12 +174,12 @@
 
 {#if events.length && events.length < total}
   <div class="more">
-    <button onclick={loadMore}>показать ещё ({total - events.length})</button>
+    <button onclick={loadMore}>{t('events.more', { n: total - events.length })}</button>
   </div>
 {/if}
 
 {#if !events.length && !error}
-  <div class="empty">Нет событий по текущим фильтрам</div>
+  <div class="empty">{t('events.empty')}</div>
 {/if}
 
 <style>

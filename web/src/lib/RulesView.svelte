@@ -1,6 +1,7 @@
 <script>
   import { keyHue } from './api.js'
-  import { describe, FLAG_LEGEND } from './rulesLang.js'
+  import { t } from './i18n.svelte.js'
+  import { describe, flagLegend } from './rulesLang.js'
   import RuleCard from './RuleCard.svelte'
 
   let files = $state([])
@@ -110,8 +111,8 @@
     refreshStatus()
   }
 
-  // Изменённость выводится сравнением с диском, а не флагом: отмена
-  // добавления или возврат строки к прежнему виду снимают её сами.
+  // Dirtiness is derived by comparing with disk, not kept as a flag:
+  // cancelling an add or restoring a line clears it by itself.
   const dirtyNames = $derived(
     files.filter((f) => contentOf(f) !== onDisk[f.name]).map((f) => f.name)
   )
@@ -128,7 +129,7 @@
     savingAll = false
   }
 
-  // Несохранённые правки: предупреждаем при закрытии/обновлении страницы
+  // Unsaved edits: warn before the page is closed or reloaded
   $effect(() => {
     if (!hasDirty) return
     const warn = (e) => {
@@ -144,17 +145,17 @@
   <div class="statusbar">
     {#if status}
       <span class="badge" class:ok={enabled === '1' || enabled === '2'} class:bad={enabled === '0'}>
-        аудит: {enabled === '0' ? 'выключен' : 'включён'}
+        {enabled === '0' ? t('rules.auditOff') : t('rules.auditOn')}
       </span>
-      <span class="badge" class:ok={lost === '0'} class:bad={lost !== '0'}>lost: {lost ?? '?'}</span>
+      <span class="badge" class:ok={lost === '0'} class:bad={lost !== '0'}>{t('rules.lost', { n: lost ?? '?' })}</span>
       <span class="badge" class:ok={inSync} class:warn={!inSync}>
-        {inSync ? 'файлы = ядро' : 'файлы ≠ ядро (нужно применить)'}
+        {inSync ? t('rules.inSync') : t('rules.outOfSync')}
       </span>
     {/if}
     <span class="spacer"></span>
     <label class="expert-toggle">
       <input type="checkbox" bind:checked={expert} />
-      режим эксперта
+      {t('rules.expert')}
     </label>
     <button
       class="apply"
@@ -162,13 +163,13 @@
       disabled={applying || hasDirty}
       onclick={apply}
       title={hasDirty
-        ? 'Сначала сохраните изменённые файлы'
-        : 'augenrules --load: перезагрузит ВСЕ правила из rules.d в ядро'}
+        ? t('rules.saveFirstTitle')
+        : t('rules.applyTitle')}
     >
-      {applying ? 'применяется…'
-        : hasDirty ? 'Сначала сохраните'
-        : applyArmed ? 'Точно применить? (клик ещё раз)'
-        : 'Применить правила'}
+      {applying ? t('rules.applying')
+        : hasDirty ? t('rules.saveFirst')
+        : applyArmed ? t('rules.applyConfirm')
+        : t('rules.apply')}
     </button>
   </div>
 
@@ -178,30 +179,30 @@
         <span class="dot" aria-hidden="true"></span>
         <div class="dirty-text">
           <div class="dirty-title">
-            Не сохранено
+            {t('rules.unsaved')}
             {#each dirtyNames as name}<code>{name}</code>{/each}
           </div>
           <div class="dirty-note">
-            Правки живут только в браузере: «Применить» загрузит в ядро версию с диска, без них.
+            {t('rules.unsavedNote')}
           </div>
         </div>
         <button class="save" disabled={savingAll} onclick={saveAll}>
-          {savingAll ? 'сохраняем…' : '💾 Сохранить всё'}
+          {savingAll ? t('rules.saving') : t('rules.saveAll')}
         </button>
       </div>
     </div>
   {/if}
 
   {#if error}
-    <div class="error"><b>Ошибка</b> {error}</div>
+    <div class="error"><b>{t('common.error')}</b> {error}</div>
   {/if}
 
   {#if expert}
     <details class="legend">
-      <summary>Шпаргалка по флагам auditd</summary>
+      <summary>{t('rules.legend')}</summary>
       <table>
         <tbody>
-          {#each FLAG_LEGEND as [flag, meaning]}
+          {#each flagLegend() as [flag, meaning]}
             <tr><td><code>{flag}</code></td><td>{meaning}</td></tr>
           {/each}
         </tbody>
@@ -211,11 +212,11 @@
 
   {#if applyResult}
     <div class="result" class:ok={applyResult.ok} class:bad={!applyResult.ok}>
-      <b>{applyResult.ok ? 'Применено' : 'Ошибка применения'}</b>
+      <b>{applyResult.ok ? t('rules.applied') : t('rules.applyFailed')}</b>
       {#if applyResult.output}<pre>{applyResult.output}</pre>{/if}
       {#if applyResult.loaded?.length}
         <button class="linkish" onclick={() => (showLoaded = !showLoaded)}>
-          загружено правил: {applyResult.loaded.length} {showLoaded ? '▴' : '▾'}
+          {t('rules.loadedCount', { n: applyResult.loaded.length })} {showLoaded ? '▴' : '▾'}
         </button>
         {#if showLoaded}<pre>{applyResult.loaded.join('\n')}</pre>{/if}
       {/if}
@@ -227,16 +228,16 @@
       <div class="filehead" class:unsaved={dirtyNames.includes(file.name)}>
         <h3>{file.name}</h3>
         {#if dirtyNames.includes(file.name)}
-          <span class="unsaved-badge"><span class="dot" aria-hidden="true"></span>не сохранено</span>
-          <button class="save" onclick={() => save(file)}>💾 Сохранить</button>
+          <span class="unsaved-badge"><span class="dot" aria-hidden="true"></span>{t('rules.unsavedBadge')}</span>
+          <button class="save" onclick={() => save(file)}>{t('rules.save')}</button>
         {/if}
         <button class="add" onclick={() => addLine(file)}>
-          {expert ? '+ строка' : '+ правило'}
+          {expert ? t('rules.addLine') : t('rules.addRule')}
         </button>
       </div>
       {#if warnings[file.name]?.length}
         <div class="warn-box">
-          <b>Проблемы в синтаксисе — auditd такие строки не примет:</b>
+          <b>{t('rules.syntaxProblems')}</b>
           {#each warnings[file.name] as wmsg}<div class="warn-item">{wmsg}</div>{/each}
         </div>
       {/if}
@@ -258,7 +259,7 @@
                   <div class="translate">{describe(entry).icon} {describe(entry).text}</div>
                 {/if}
               </div>
-              <button class="del" title="удалить строку" onclick={() => removeLine(file, i)}>✕</button>
+              <button class="del" title={t('rules.deleteLine')} onclick={() => removeLine(file, i)}>✕</button>
             </div>
           {:else}
             <RuleCard
@@ -273,8 +274,8 @@
   {/each}
 
   <div class="newfile">
-    <input placeholder="новый файл, например 10-docker.rules" bind:value={newFileName} />
-    <button onclick={createFile}>Создать файл</button>
+    <input placeholder={t('rules.newFile')} bind:value={newFileName} />
+    <button onclick={createFile}>{t('rules.createFile')}</button>
   </div>
 </div>
 
