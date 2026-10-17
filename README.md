@@ -8,6 +8,8 @@ through `embed.FS`.
 Russian documentation: [README.ru.md](README.ru.md). The UI language
 (English by default, Russian available) is switched in the ⚙ settings menu.
 
+![Screenshot](screenshot.png)
+
 ## Features
 
 - Live log tail (SSE) with pause
